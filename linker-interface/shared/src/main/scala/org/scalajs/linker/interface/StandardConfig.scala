@@ -61,6 +61,16 @@ final class StandardConfig private (
      *  minifier.
      */
     val minify: Boolean,
+    /** Whether to additionally emit TypeScript declaration files (`.d.ts`).
+     *
+     *  When enabled, the linker writes a `.d.ts` file next to each generated
+     *  `.js` module, describing the `@JSExport` / `@JSExportTopLevel` surface of
+     *  that module. The JavaScript output itself is unaffected.
+     *
+     *  This is a best-effort feature: type information is recovered from the
+     *  linked IR where possible, and falls back to `any` otherwise.
+     */
+    val outputDeclarations: Boolean,
     /** Whether to use the Google Closure Compiler pass, if it is available.
      *  On the JavaScript platform, this does not have any effect.
      */
@@ -103,6 +113,7 @@ final class StandardConfig private (
       relativizeSourceMapBase = None,
       outputPatterns = OutputPatterns.Defaults,
       minify = false,
+      outputDeclarations = false,
       closureCompilerIfAvailable = false,
       prettyPrint = false,
       batchMode = false,
@@ -184,6 +195,9 @@ final class StandardConfig private (
   def withMinify(minify: Boolean): StandardConfig =
     copy(minify = minify)
 
+  def withOutputDeclarations(outputDeclarations: Boolean): StandardConfig =
+    copy(outputDeclarations = outputDeclarations)
+
   @deprecated(
       "Support for the Google Closure Compiler is deprecated. " +
       "It is off by default, and will eventually be removed.",
@@ -219,6 +233,7 @@ final class StandardConfig private (
        |  relativizeSourceMapBase    = $relativizeSourceMapBase,
        |  outputPatterns             = $outputPatterns,
        |  minify                     = $minify,
+       |  outputDeclarations         = $outputDeclarations,
        |  closureCompilerIfAvailable = $closureCompilerIfAvailable,
        |  prettyPrint                = $prettyPrint,
        |  batchMode                  = $batchMode,
@@ -240,6 +255,7 @@ final class StandardConfig private (
       outputPatterns: OutputPatterns = outputPatterns,
       relativizeSourceMapBase: Option[URI] = relativizeSourceMapBase,
       minify: Boolean = minify,
+      outputDeclarations: Boolean = outputDeclarations,
       closureCompilerIfAvailable: Boolean = closureCompilerIfAvailable,
       prettyPrint: Boolean = prettyPrint,
       batchMode: Boolean = batchMode,
@@ -259,6 +275,7 @@ final class StandardConfig private (
       relativizeSourceMapBase,
       outputPatterns,
       minify,
+      outputDeclarations,
       closureCompilerIfAvailable,
       prettyPrint,
       batchMode,
@@ -288,6 +305,7 @@ object StandardConfig {
             config.relativizeSourceMapBase.map(_.toASCIIString()))
         .addField("outputPatterns", config.outputPatterns)
         .addField("minify", config.minify)
+        .addField("outputDeclarations", config.outputDeclarations)
         .addField("closureCompilerIfAvailable",
             config.closureCompilerIfAvailable)
         .addField("prettyPrint", config.prettyPrint)
@@ -317,6 +335,7 @@ object StandardConfig {
    *  - `relativizeSourceMapBase`: `None`
    *  - `outputPatterns`: [[OutputPatterns.Defaults]]
    *  - `minify`: `false`
+   *  - `outputDeclarations`: `false`
    *  - `closureCompilerIfAvailable`: `false`
    *  - `prettyPrint`: `false`
    *  - `batchMode`: `false`

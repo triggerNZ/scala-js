@@ -1,6 +1,35 @@
 # Design: Emitting TypeScript declaration files (`.d.ts`) for the exported API
 
-Status: exploratory design / feasibility outline. No implementation yet.
+Status: first implementation landed (Strategy A, best-effort). See "Implementation status" below.
+
+## Implementation status
+
+A first, best-effort implementation exists behind an off-by-default config flag:
+
+- Enable with `scalaJSLinkerConfig ~= { _.withOutputDeclarations(true) }`. When on, the linker writes
+  a `.d.ts` next to each generated `.js` public module. The JS output is byte-for-byte unchanged.
+- Config: `StandardConfig.outputDeclarations` (default `false`), `OutputPatterns.dtsFile`
+  (default `%s.d.ts`, derived from the JS file pattern), threaded through
+  `LinkerBackendImpl.Config` and `StandardLinkerBackend`.
+- Generator: `linker/shared/.../backend/TypeScriptDeclarations.scala` renders each public module's
+  export surface, recovering real types from the underlying typed `MethodDef`/`FieldDef`s by matching
+  each exported member by simple name + arity, falling back to `any`.
+- Wiring: `OutputWriter.genModuleDeclarations` hook writes the `.d.ts` (and protects it from stale
+  file cleanup); `BasicLinkerBackend` overrides it for public modules.
+- Tests: `linker/shared/src/test/.../TypeScriptDeclarationsTest.scala` links small programs through
+  the real linker and checks `main.d.ts` (verified: `Int` return recovers to `number`; field export
+  renders; disabled ⇒ no file). Recommend running with `withOptimizer(false)` so exported forwarders
+  are not inlined away before their underlying typed members can be matched.
+
+What is deliberately still `any` in this first cut (all consistent with the ceiling below): referenced
+class types outside the same module's class exports, arrays, `Long`/`Char`, and — a constraint
+discovered during implementation — **top-level exported fields, which the IR requires to have type
+`any`** (the compiler boxes them at the export boundary), so field exports are always `any`.
+
+Remaining/next: richer class-type references across modules, module (`object`) export shapes, Scala 3
+cross-build verified via `linker3/compile`, and a `tsc --noEmit` end-to-end check.
+
+---
 
 ## Context
 

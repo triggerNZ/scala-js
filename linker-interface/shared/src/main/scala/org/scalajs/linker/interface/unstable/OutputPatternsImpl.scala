@@ -29,4 +29,7 @@ object OutputPatternsImpl {
 
   def sourceMapURI(patterns: OutputPatterns, moduleID: String): String =
     patterns.sourceMapURI.format(moduleID)
+
+  def dtsFile(patterns: OutputPatterns, moduleID: String): String =
+    patterns.dtsFile.format(moduleID)
 }

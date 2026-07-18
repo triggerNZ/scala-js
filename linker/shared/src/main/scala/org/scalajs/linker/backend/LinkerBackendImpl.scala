@@ -59,6 +59,8 @@ object LinkerBackendImpl {
       val relativizeSourceMapBase: Option[URI],
       /** Whether to use Scala.js' minifier for property names. */
       val minify: Boolean,
+      /** Whether to additionally emit TypeScript declaration files (`.d.ts`). */
+      val outputDeclarations: Boolean,
       /** Whether to use the Google Closure Compiler pass, if it is available.
        *  On the JavaScript platform, this does not have any effect.
        */
@@ -76,6 +78,7 @@ object LinkerBackendImpl {
         outputPatterns = OutputPatterns.Defaults,
         relativizeSourceMapBase = None,
         minify = false,
+        outputDeclarations = false,
         closureCompilerIfAvailable = false,
         prettyPrint = false,
         maxConcurrentWrites = 50
@@ -101,6 +104,9 @@ object LinkerBackendImpl {
 
     def withMinify(minify: Boolean): Config =
       copy(minify = minify)
+
+    def withOutputDeclarations(outputDeclarations: Boolean): Config =
+      copy(outputDeclarations = outputDeclarations)
 
     @deprecated(
         "Support for the Google Closure Compiler is deprecated. " +
@@ -128,6 +134,7 @@ object LinkerBackendImpl {
         outputPatterns: OutputPatterns = outputPatterns,
         relativizeSourceMapBase: Option[URI] = relativizeSourceMapBase,
         minify: Boolean = minify,
+        outputDeclarations: Boolean = outputDeclarations,
         closureCompilerIfAvailable: Boolean = closureCompilerIfAvailable,
         prettyPrint: Boolean = prettyPrint,
         maxConcurrentWrites: Int = maxConcurrentWrites
@@ -139,6 +146,7 @@ object LinkerBackendImpl {
         outputPatterns,
         relativizeSourceMapBase,
         minify,
+        outputDeclarations,
         closureCompilerIfAvailable,
         prettyPrint,
         maxConcurrentWrites

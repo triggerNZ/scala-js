@@ -35,19 +35,30 @@ private[backend] abstract class OutputWriter(output: OutputDirectory,
   protected def writeModuleWithSourceMap(moduleID: ModuleID, force: Boolean): Option[(ByteBuffer,
       ByteBuffer)]
 
+  /** Produces the TypeScript declaration file (`.d.ts`) content for a module.
+   *
+   *  Returns `None` when declaration output is disabled (the default). Backends
+   *  that support it override this method.
+   */
+  protected def genModuleDeclarations(moduleID: ModuleID): Option[ByteBuffer] = None
+
   def write(moduleSet: ModuleSet)(implicit ec: ExecutionContext): Future[Report] = {
     val ioThrottler = new IOThrottler(config.maxConcurrentWrites)
 
-    def filesToRemove(seen: Set[String], reports: List[Report.Module]): Set[String] =
-      seen -- reports.flatMap(r => r.jsFileName :: r.sourceMapName.toList)
+    def filesToRemove(seen: Set[String], reports: List[Report.Module],
+        extraFiles: Set[String]): Set[String] = {
+      seen -- reports.flatMap(r => r.jsFileName :: r.sourceMapName.toList) -- extraFiles
+    }
 
     for {
       currentFilesList <- outputImpl.listFiles()
       currentFiles = currentFilesList.toSet
-      reports <- Future.traverse(moduleSet.modules) { m =>
+      results <- Future.traverse(moduleSet.modules) { m =>
         ioThrottler.throttle(writeModule(m.id, currentFiles))
       }
-      _ <- Future.traverse(filesToRemove(currentFiles, reports)) { f =>
+      reports = results.map(_._1)
+      extraFiles = results.flatMap(_._2).toSet
+      _ <- Future.traverse(filesToRemove(currentFiles, reports, extraFiles)) { f =>
         ioThrottler.throttle(outputImpl.delete(f))
       }
     } yield {
@@ -62,11 +73,17 @@ private[backend] abstract class OutputWriter(output: OutputDirectory,
     }
   }
 
+  /** Writes the files for one module.
+   *
+   *  Returns the module's report and the list of additional files (beyond the
+   *  `.js` and source map) that were written and must be preserved from cleanup
+   *  (currently the `.d.ts` file, when enabled).
+   */
   private def writeModule(moduleID: ModuleID, existingFiles: Set[String])(
-      implicit ec: ExecutionContext): Future[Report.Module] = {
+      implicit ec: ExecutionContext): Future[(Report.Module, List[String])] = {
     val jsFileName = OutputPatternsImpl.jsFile(config.outputPatterns, moduleID.id)
 
-    if (config.sourceMap) {
+    val reportFuture: Future[Report.Module] = if (config.sourceMap) {
       val sourceMapFileName = OutputPatternsImpl.sourceMapFile(config.outputPatterns, moduleID.id)
       val report =
         new ReportImpl.ModuleImpl(moduleID.id, jsFileName, Some(sourceMapFileName), moduleKind)
@@ -97,6 +114,24 @@ private[backend] abstract class OutputWriter(output: OutputDirectory,
         case None =>
           Future.successful(report)
       }
+    }
+
+    if (config.outputDeclarations) {
+      val dtsFileName = OutputPatternsImpl.dtsFile(config.outputPatterns, moduleID.id)
+      genModuleDeclarations(moduleID) match {
+        case Some(dts) =>
+          for {
+            report <- reportFuture
+            _ <- outputImpl.writeFull(dtsFileName, dts, skipContentCheck)
+          } yield {
+            (report, dtsFileName :: Nil)
+          }
+        case None =>
+          // Keep any previously written .d.ts around.
+          reportFuture.map((_, dtsFileName :: Nil))
+      }
+    } else {
+      reportFuture.map((_, Nil))
     }
   }
 }

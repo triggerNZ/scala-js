@@ -32,7 +32,8 @@ final class OutputPatterns private (
     private[interface] val sourceMapFile: String,
     private[interface] val moduleName: String,
     private[interface] val jsFileURI: String,
-    private[interface] val sourceMapURI: String
+    private[interface] val sourceMapURI: String,
+    private[interface] val dtsFile: String
 ) {
 
   /** Pattern for the JS file name (the file containing the module's code). */
@@ -55,6 +56,13 @@ final class OutputPatterns private (
   def withSourceMapURI(sourceMapURI: String): OutputPatterns =
     copy(sourceMapURI = sourceMapURI)
 
+  /** Pattern for the TypeScript declaration file name.
+   *
+   *  Only used when `outputDeclarations` is enabled in the linker config.
+   */
+  def withDeclarationFile(dtsFile: String): OutputPatterns =
+    copy(dtsFile = dtsFile)
+
   override def toString(): String = {
     s"""OutputPatterns(
        |  jsFile        = $jsFile,
@@ -62,6 +70,7 @@ final class OutputPatterns private (
        |  moduleName    = $moduleName,
        |  jsFileURI     = $jsFileURI,
        |  sourceMapURI  = $sourceMapURI,
+       |  dtsFile       = $dtsFile,
        |)""".stripMargin
   }
 
@@ -70,8 +79,9 @@ final class OutputPatterns private (
       sourceMapFile: String = sourceMapFile,
       moduleName: String = moduleName,
       jsFileURI: String = jsFileURI,
-      sourceMapURI: String = sourceMapURI): OutputPatterns = {
-    new OutputPatterns(jsFile, sourceMapFile, moduleName, jsFileURI, sourceMapURI)
+      sourceMapURI: String = sourceMapURI,
+      dtsFile: String = dtsFile): OutputPatterns = {
+    new OutputPatterns(jsFile, sourceMapFile, moduleName, jsFileURI, sourceMapURI, dtsFile)
   }
 }
 
@@ -87,6 +97,7 @@ object OutputPatterns {
    *  - `moduleName`: "./" is prepended (relative path import).
    *  - `jsFileURI`: relative URI (same as the provided pattern).
    *  - `sourceMapURI`: relative URI (same as `sourceMapFile`).
+   *  - `dtsFile`: a trailing ".js" is replaced by ".d.ts" (else ".d.ts" is appended).
    */
   def fromJSFile(jsFile: String): OutputPatterns = {
     new OutputPatterns(
@@ -94,9 +105,14 @@ object OutputPatterns {
       sourceMapFile = s"$jsFile.map",
       moduleName = s"./$jsFile",
       jsFileURI = jsFile,
-      sourceMapURI = s"$jsFile.map"
+      sourceMapURI = s"$jsFile.map",
+      dtsFile = deriveDTSFile(jsFile)
     )
   }
+
+  private def deriveDTSFile(jsFile: String): String =
+    if (jsFile.endsWith(".js")) jsFile.substring(0, jsFile.length - 3) + ".d.ts"
+    else jsFile + ".d.ts"
 
   private[interface] implicit object OutputPatternsFingerprint extends Fingerprint[OutputPatterns] {
 
@@ -107,6 +123,7 @@ object OutputPatterns {
         .addField("moduleName", outputPatterns.moduleName)
         .addField("jsFileURI", outputPatterns.jsFileURI)
         .addField("sourceMapURI", outputPatterns.sourceMapURI)
+        .addField("dtsFile", outputPatterns.dtsFile)
         .build()
     }
   }

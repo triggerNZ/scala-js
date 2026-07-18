@@ -86,6 +86,8 @@ final class BasicLinkerBackend(config: LinkerBackendImpl.Config) extends LinkerB
     totalModules = moduleSet.modules.size
     rewrittenModules.set(0)
 
+    val modulesByID = moduleSet.modules.map(m => m.id -> m).toMap
+
     val emitterResult = logger.time("Emitter") {
       emitter.emit(moduleSet, logger)
     }
@@ -163,6 +165,14 @@ final class BasicLinkerBackend(config: LinkerBackendImpl.Config) extends LinkerB
           Some((jsFileWriter.toByteBuffer(), sourceMapWriter.toByteBuffer()))
         } else {
           None
+        }
+      }
+
+      override protected def genModuleDeclarations(moduleID: ModuleID): Option[ByteBuffer] = {
+        // Only public modules carry top-level exports worth describing.
+        modulesByID.get(moduleID).filter(_.public).map { module =>
+          val content = TypeScriptDeclarations.genModule(module)
+          ByteBuffer.wrap(content.getBytes(StandardCharsets.UTF_8))
         }
       }
 
