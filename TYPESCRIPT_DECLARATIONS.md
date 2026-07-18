@@ -49,14 +49,20 @@ names exported by the `.js` (`export { … as Name }`) exactly match those decla
 A `tsc --noEmit` smoke check (validity + a consumer file) and a Node runtime structural check are
 sensible CI additions on top.
 
-What is deliberately still `any` (all consistent with the ceiling below): referenced class types
-outside the same module's class exports, arrays, `Long`/`Char`, and — a constraint discovered during
-implementation — **top-level exported fields, which the IR requires to have type `any`** (the compiler
-boxes them at the export boundary), so field exports are always `any`.
+A reference to a class that is itself exported (as a JS class or via a constructor-function export)
+resolves to that class's export name. If the class is exported from another module, the generator
+emits an `import type { Name } from "./thatModule.js"` (the same specifier the runtime uses); the
+global export registry is built once across all modules. `NoModule` never needs imports since it is a
+single module. Reference-typed method results are **nullable** in the IR (a method name carries no
+nullability), so they render faithfully as `T | null`.
 
-Remaining/next: richer class-type references across modules, module (`object`) export shapes, and
-`tsc --noEmit` / Node runtime consistency checks in CI. Scala 3 cross-build is verified via
-`linker3/compile`.
+What is deliberately still `any` (all consistent with the ceiling below): arrays, `Long`/`Char`,
+references to non-exported classes, and — a constraint discovered during implementation — **top-level
+exported fields, which the IR requires to have type `any`** (the compiler boxes them at the export
+boundary), so field exports are always `any`.
+
+Remaining/next: module (`object`) export shapes, and `tsc --noEmit` / Node runtime consistency checks
+in CI. Scala 3 cross-build is verified via `linker3/compile`.
 
 ---
 

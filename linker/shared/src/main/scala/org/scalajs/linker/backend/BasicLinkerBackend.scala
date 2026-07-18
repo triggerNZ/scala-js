@@ -87,6 +87,7 @@ final class BasicLinkerBackend(config: LinkerBackendImpl.Config) extends LinkerB
     rewrittenModules.set(0)
 
     val modulesByID = moduleSet.modules.map(m => m.id -> m).toMap
+    val tsClassRegistry = TypeScriptDeclarations.classRegistry(moduleSet.modules)
 
     val emitterResult = logger.time("Emitter") {
       emitter.emit(moduleSet, logger)
@@ -172,7 +173,8 @@ final class BasicLinkerBackend(config: LinkerBackendImpl.Config) extends LinkerB
         // Only public modules carry top-level exports worth describing.
         modulesByID.get(moduleID).filter(_.public).map { module =>
           val moduleKind = config.commonConfig.coreSpec.moduleKind
-          val content = TypeScriptDeclarations.genModule(module, moduleKind)
+          val content = TypeScriptDeclarations.genModule(module, moduleKind, tsClassRegistry,
+              mID => OutputPatternsImpl.moduleName(config.outputPatterns, mID.id))
           ByteBuffer.wrap(content.getBytes(StandardCharsets.UTF_8))
         }
       }

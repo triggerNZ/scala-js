@@ -223,6 +223,89 @@ class TypeScriptDeclarationsTest {
       assertFalse(dts, dts.contains("export "))
     }
   }
+
+  /** A reference to a class exported from the *same* module resolves to its
+   *  name, with no import.
+   */
+  @Test
+  def resolvesSameModuleClassReference(): AsyncResult = await {
+    val thisType = ClassType(TestClass, nullable = false, exact = false)
+    // A class-typed method result is nullable in the IR (its name carries no
+    // nullability), so it renders as `Test | null`.
+    val resultType = ClassType(TestClass, nullable = true, exact = false)
+
+    val classDefs = List(
+      classDef(TestClass,
+        superClass = Some(ObjectClass),
+        methods = List(
+          trivialCtor(TestClass),
+          MethodDef(EMF, m("self", Nil, ClassRef(TestClass)), NON, Nil, resultType,
+              Some(This()(thisType)))(EOH.withNoinline(true), UNV)
+        ),
+        jsMethodProps = List(
+          JSMethodDef(EMF, str("self"), Nil, None,
+            Apply(EAF, This()(thisType), m("self", Nil, ClassRef(TestClass)), Nil)(resultType))(
+              EOH, UNV)
+        ),
+        topLevelExportDefs = List(
+          TopLevelMethodExportDef("main",
+            JSMethodDef(SMF, str("Test"), Nil, None,
+              New(TestClass, NoArgConstructorName, Nil))(EOH, UNV))
+        )
+      )
+    )
+
+    linkDTS(classDefs).map { dts0 =>
+      val dts = dts0.getOrElse(throw new AssertionError("no .d.ts emitted"))
+      assertTrue(dts, dts.contains("self(): Test | null;"))
+      assertFalse("must not import a same-module class", dts.contains("import"))
+    }
+  }
+
+  /** A reference to a class exported from *another* module resolves to its name
+   *  and emits an `import type` from that module.
+   */
+  @Test
+  def resolvesCrossModuleClassReference(): AsyncResult = await {
+    val LibClass = ClassName("Lib")
+    val AppClass = ClassName("App")
+    // Class-typed method result is nullable in the IR (see above).
+    val libType = ClassType(LibClass, nullable = true, exact = false)
+
+    val classDefs = List(
+      // Module "lib": exports class `Lib`.
+      classDef(LibClass,
+        superClass = Some(ObjectClass),
+        methods = List(trivialCtor(LibClass)),
+        topLevelExportDefs = List(
+          TopLevelMethodExportDef("lib",
+            JSMethodDef(SMF, str("Lib"), Nil, None,
+              New(LibClass, NoArgConstructorName, Nil))(EOH, UNV))
+        )
+      ),
+      // Module "app": exports `makeLib(): Lib`.
+      classDef(AppClass,
+        superClass = Some(ObjectClass),
+        methods = List(
+          trivialCtor(AppClass),
+          MethodDef(SMF, m("makeLib", Nil, ClassRef(LibClass)), NON, Nil, libType,
+              Some(New(LibClass, NoArgConstructorName, Nil)))(EOH.withNoinline(true), UNV)
+        ),
+        topLevelExportDefs = List(
+          TopLevelMethodExportDef("app",
+            JSMethodDef(SMF, str("makeLib"), Nil, None,
+              ApplyStatic(EAF, AppClass, m("makeLib", Nil, ClassRef(LibClass)), Nil)(libType))(
+              EOH, UNV))
+        )
+      )
+    )
+
+    link(classDefs, config()).map { output =>
+      val appDts = stringContent(output, "app.d.ts")
+      assertTrue(appDts, appDts.contains("""import type { Lib } from "./lib.js";"""))
+      assertTrue(appDts, appDts.contains("export function makeLib(): Lib | null;"))
+    }
+  }
 }
 
 object TypeScriptDeclarationsTest {
