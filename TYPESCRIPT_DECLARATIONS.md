@@ -61,8 +61,14 @@ references to non-exported classes, and — a constraint discovered during imple
 exported fields, which the IR requires to have type `any`** (the compiler boxes them at the export
 boundary), so field exports are always `any`.
 
-Remaining/next: module (`object`) export shapes, and `tsc --noEmit` / Node runtime consistency checks
-in CI. Scala 3 cross-build is verified via `linker3/compile`.
+A `@JSExportTopLevel` `object` (a singleton) renders as a `const` of an object type literal whose
+properties are the object's `@JSExport`ed members (e.g. `export const Calc: { answer(): number; }`).
+Members are rendered without the `static` keyword, which is valid in a class body but not in a type
+literal.
+
+Remaining/next: `tsc --noEmit` / Node runtime consistency checks in CI, and an optional
+non-nullable-references toggle (reference-typed results are `T | null` by default). Scala 3
+cross-build is verified via `linker3/compile`.
 
 ---
 

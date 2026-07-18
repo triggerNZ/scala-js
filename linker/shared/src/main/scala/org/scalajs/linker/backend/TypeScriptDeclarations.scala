@@ -180,7 +180,7 @@ private[backend] object TypeScriptDeclarations {
       for (ctor <- ctors)
         out.append(s"  constructor(${renderParams(ctor.args, None, ctx)});\n")
 
-      for (line <- genExportedMemberLines(cls, ctx))
+      for (line <- genExportedMemberLines(cls, ctx, inClassBody = true))
         out.append(s"  $line\n")
     }
 
@@ -189,7 +189,8 @@ private[backend] object TypeScriptDeclarations {
 
   private def genModuleExport(out: StringBuilder, exportName: String,
       owningClass: Option[LinkedClass], ctx: Context): Unit = {
-    val memberLines = owningClass.toList.flatMap(genExportedMemberLines(_, ctx))
+    // A module export is a singleton value, rendered as an object type literal.
+    val memberLines = owningClass.toList.flatMap(genExportedMemberLines(_, ctx, inClassBody = false))
     if (memberLines.isEmpty) {
       out.append(s"${ctx.topLevelPrefix}const $exportName: {};\n")
     } else {
@@ -228,7 +229,7 @@ private[backend] object TypeScriptDeclarations {
 
     for {
       cls <- targetClass
-      line <- genExportedMemberLines(cls, ctx)
+      line <- genExportedMemberLines(cls, ctx, inClassBody = true)
     } {
       out.append(s"  $line\n")
     }
@@ -267,15 +268,20 @@ private[backend] object TypeScriptDeclarations {
     out.append(s"${ctx.topLevelPrefix}let $exportName: ${tsType(tpe, ctx)};\n")
   }
 
-  /** Renders one line per exported instance/static member of `cls`, suitable for
-   *  use inside a `class { ... }` body or an object type literal `{ ... }`.
+  /** Renders one line per exported instance/static member of `cls`.
+   *
+   *  `inClassBody` selects the context: a `class { ... }` body, where `static`
+   *  members are written with the `static` keyword; or an object type literal
+   *  `{ ... }` (a singleton value), where every member is just a property and
+   *  `static` is not valid syntax.
    */
-  private def genExportedMemberLines(cls: LinkedClass, ctx: Context): List[String] = {
+  private def genExportedMemberLines(cls: LinkedClass, ctx: Context,
+      inClassBody: Boolean): List[String] = {
     cls.exportedMembers.flatMap {
       case m: JSMethodDef =>
         stringName(m.name).map { name =>
           val static = m.flags.namespace.isStatic
-          val prefix = if (static) "static " else ""
+          val prefix = if (inClassBody && static) "static " else ""
           findMatchingMethod(cls, name, m.args.size, static) match {
             case Some(underlying) =>
               s"$prefix${propName(name)}(${renderParams(underlying.args, None, ctx)}): ${tsType(underlying.resultType, ctx)};"
@@ -287,7 +293,7 @@ private[backend] object TypeScriptDeclarations {
       case p: JSPropertyDef =>
         stringName(p.name).map { name =>
           val static = p.flags.namespace.isStatic
-          val prefix = if (static) "static " else ""
+          val prefix = if (inClassBody && static) "static " else ""
           val readOnly = if (p.setterArgAndBody.isEmpty) "readonly " else ""
           // Recover the type from a matching 0-arg getter, if any.
           val tpe = findMatchingMethod(cls, name, arity = 0, static)

@@ -306,6 +306,43 @@ class TypeScriptDeclarationsTest {
       assertTrue(appDts, appDts.contains("export function makeLib(): Lib | null;"))
     }
   }
+
+  /** `@JSExportTopLevel` on an `object` (a singleton) renders as a `const` of an
+   *  object type literal, with the object's `@JSExport`ed members as properties
+   *  (no `static` keyword, which is invalid in a type literal), recovering types.
+   */
+  @Test
+  def exportsModuleObject(): AsyncResult = await {
+    val CalcClass = ClassName("Calc")
+    val thisType = ClassType(CalcClass, nullable = false, exact = false)
+
+    val classDefs = List(
+      classDef(CalcClass,
+        kind = ClassKind.ModuleClass,
+        superClass = Some(ObjectClass),
+        methods = List(
+          trivialCtor(CalcClass, forModuleClass = true),
+          MethodDef(EMF, m("answer", Nil, I), NON, Nil, IntType, Some(int(42)))(
+              EOH.withNoinline(true), UNV)
+        ),
+        jsMethodProps = List(
+          JSMethodDef(EMF, str("answer"), Nil, None,
+            Apply(EAF, This()(thisType), m("answer", Nil, I), Nil)(IntType))(
+              EOH, UNV)
+        ),
+        topLevelExportDefs = List(
+          TopLevelModuleExportDef("main", "Calc")
+        )
+      )
+    )
+
+    linkDTS(classDefs).map { dts0 =>
+      val dts = dts0.getOrElse(throw new AssertionError("no .d.ts emitted"))
+      assertTrue(dts, dts.contains("export const Calc: {"))
+      assertTrue(dts, dts.contains("answer(): number;"))
+      assertFalse("`static` is invalid in an object type literal", dts.contains("static"))
+    }
+  }
 }
 
 object TypeScriptDeclarationsTest {
