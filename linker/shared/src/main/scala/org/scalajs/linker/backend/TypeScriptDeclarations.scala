@@ -84,7 +84,17 @@ private[backend] object TypeScriptDeclarations {
         genModuleExport(out, exportName, owningClass, ctx)
 
       case TopLevelMethodExportDef(_, methodDef) =>
-        genMethodExport(out, exportName = tle.exportName, methodDef, owningClass, ctx)
+        /* `@JSExportTopLevel` on a plain Scala class is lowered to a top-level
+         * *method* export whose forwarder constructs the class (`new C(...)`).
+         * Detect that and render it as a TS `class` instead of a function.
+         */
+        constructedClass(methodDef.body) match {
+          case Some(className) =>
+            val targetClass = ctx.classesByName.get(className).orElse(owningClass)
+            genConstructorClassExport(out, tle.exportName, methodDef, targetClass, ctx)
+          case None =>
+            genMethodExport(out, exportName = tle.exportName, methodDef, owningClass, ctx)
+        }
 
       case TopLevelFieldExportDef(_, exportName, field) =>
         genFieldExport(out, exportName, field, owningClass, ctx)
@@ -119,6 +129,42 @@ private[backend] object TypeScriptDeclarations {
         out.append(s"  $line\n")
       out.append("};\n")
     }
+  }
+
+  /** If `tree` (a top-level method export forwarder body) ultimately constructs
+   *  a class, returns that class's name. This is how `@JSExportTopLevel` on a
+   *  plain Scala class appears in the linked IR.
+   */
+  private def constructedClass(tree: Tree): Option[ClassName] = tree match {
+    case New(className, _, _)           => Some(className)
+    case Block(stats) if stats.nonEmpty => constructedClass(stats.last)
+    case Labeled(_, _, body)            => constructedClass(body)
+    case Return(expr, _)                => constructedClass(expr)
+    case _                              => None
+  }
+
+  private def genConstructorClassExport(out: StringBuilder, exportName: String,
+      methodDef: JSMethodDef, targetClass: Option[LinkedClass], ctx: Context): Unit = {
+    out.append(s"export class $exportName {\n")
+
+    /* Constructor: recover parameter types from the target class's constructor
+     * with matching arity; fall back to `any` params by arity.
+     */
+    val arity = methodDef.args.size
+    val ctorParams = targetClass
+      .flatMap(_.methods.find(m => m.flags.namespace.isConstructor && m.args.size == arity))
+      .map(ctor => renderParams(ctor.args, None, ctx))
+      .getOrElse(renderParams(methodDef.args, methodDef.restParam, ctx, forceAny = true))
+    out.append(s"  constructor($ctorParams);\n")
+
+    for {
+      cls <- targetClass
+      line <- genExportedMemberLines(cls, ctx)
+    } {
+      out.append(s"  $line\n")
+    }
+
+    out.append("}\n")
   }
 
   private def genMethodExport(out: StringBuilder, exportName: String,

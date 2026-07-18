@@ -21,13 +21,27 @@ A first, best-effort implementation exists behind an off-by-default config flag:
   renders; disabled ⇒ no file). Recommend running with `withOptimizer(false)` so exported forwarders
   are not inlined away before their underlying typed members can be matched.
 
-What is deliberately still `any` in this first cut (all consistent with the ceiling below): referenced
-class types outside the same module's class exports, arrays, `Long`/`Char`, and — a constraint
-discovered during implementation — **top-level exported fields, which the IR requires to have type
-`any`** (the compiler boxes them at the export boundary), so field exports are always `any`.
+Both forms of exported class are handled: non-native JS classes (`class X extends js.Object`, a
+`TopLevelJSClassExportDef`) and **plain Scala classes exported with `@JSExportTopLevel`**, which the
+compiler lowers to a top-level *method* export whose forwarder body is `new C(...)`. The generator
+detects the constructed class (via the `New` node at the tail of the forwarder body) and renders it
+as `export class C { constructor(…); <members> }`, recovering constructor parameter and member types.
+Verified on the `reversi` example, which yields:
 
-Remaining/next: richer class-type references across modules, module (`object`) export shapes, Scala 3
-cross-build verified via `linker3/compile`, and a `tsc --noEmit` end-to-end check.
+```ts
+export class Reversi {
+  constructor(jQuery: any, playground: any);
+  startGame(): void;
+}
+```
+
+What is deliberately still `any` (all consistent with the ceiling below): referenced class types
+outside the same module's class exports, arrays, `Long`/`Char`, and — a constraint discovered during
+implementation — **top-level exported fields, which the IR requires to have type `any`** (the compiler
+boxes them at the export boundary), so field exports are always `any`.
+
+Remaining/next: richer class-type references across modules, module (`object`) export shapes, and a
+`tsc --noEmit` end-to-end check. Scala 3 cross-build is verified via `linker3/compile`.
 
 ---
 

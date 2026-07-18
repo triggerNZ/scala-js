@@ -64,6 +64,47 @@ class TypeScriptDeclarationsTest {
     }
   }
 
+  /** `@JSExportTopLevel` on a plain Scala class (lowered to a constructor-
+   *  function export) is rendered as a TS `class`, with the constructor and the
+   *  class's `@JSExport`ed members, recovering real member types.
+   */
+  @Test
+  def exportsConstructorClass(): AsyncResult = await {
+    val classDefs = List(
+      classDef(TestClass,
+        superClass = Some(ObjectClass),
+        methods = List(
+          trivialCtor(TestClass),
+          // Underlying instance method whose type is recovered for the export.
+          MethodDef(EMF, m("greet", Nil, I), NON, Nil, IntType, Some(int(7)))(
+              EOH.withNoinline(true), UNV)
+        ),
+        jsMethodProps = List(
+          // Exported instance member forwarding to `greet`.
+          JSMethodDef(EMF, str("greet"), Nil, None,
+            Apply(EAF, This()(ClassType(TestClass, nullable = false, exact = false)),
+                m("greet", Nil, I), Nil)(IntType))(
+              EOH, UNV)
+        ),
+        topLevelExportDefs = List(
+          // Constructor-function export: `new Test()`.
+          TopLevelMethodExportDef("main",
+            JSMethodDef(SMF, str("Test"), Nil, None,
+              New(TestClass, NoArgConstructorName, Nil))(
+              EOH, UNV))
+        )
+      )
+    )
+
+    linkDTS(classDefs).map { dts =>
+      assertTrue("no .d.ts emitted", dts.isDefined)
+      val content = dts.get
+      assertTrue(content, content.contains("export class Test {"))
+      assertTrue(content, content.contains("constructor();"))
+      assertTrue(content, content.contains("greet(): number;"))
+    }
+  }
+
   /** A top-level exported field is rendered as a `let` binding.
    *
    *  Top-level exported fields are required by the IR to have type `any` (the
