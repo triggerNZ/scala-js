@@ -35,13 +35,28 @@ export class Reversi {
 }
 ```
 
+The `.d.ts` framing matches the emitted `.js` module format: named `export`s for `ESModule` /
+`CommonJSModule`, and ambient `declare`s (a script defining globals) for `NoModule`. For example,
+the `NoModule` reversi output is `declare class Reversi { … }`, matching its `.js` which exposes
+`Reversi` as a global rather than an ES export.
+
+**Checking `.d.ts` ↔ `.js` consistency.** Type-level correctness cannot be verified against the
+untyped `.js`; it rests on the generator's IR→TS mapping and its tests. What *is* checkable is
+structural consistency — the set of exported names and the module framing. `TypeScriptDeclarationsTest`
+includes `declarationsAreConsistentWithJS`, which links an `ESModule` program and asserts that the
+names exported by the `.js` (`export { … as Name }`) exactly match those declared by the `.d.ts`, and
+`globalDeclarationsForNoModule`, which asserts the `NoModule` output uses `declare` and no `export`.
+A `tsc --noEmit` smoke check (validity + a consumer file) and a Node runtime structural check are
+sensible CI additions on top.
+
 What is deliberately still `any` (all consistent with the ceiling below): referenced class types
 outside the same module's class exports, arrays, `Long`/`Char`, and — a constraint discovered during
 implementation — **top-level exported fields, which the IR requires to have type `any`** (the compiler
 boxes them at the export boundary), so field exports are always `any`.
 
-Remaining/next: richer class-type references across modules, module (`object`) export shapes, and a
-`tsc --noEmit` end-to-end check. Scala 3 cross-build is verified via `linker3/compile`.
+Remaining/next: richer class-type references across modules, module (`object`) export shapes, and
+`tsc --noEmit` / Node runtime consistency checks in CI. Scala 3 cross-build is verified via
+`linker3/compile`.
 
 ---
 

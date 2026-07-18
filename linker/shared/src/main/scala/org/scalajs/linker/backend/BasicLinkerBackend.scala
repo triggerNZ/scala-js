@@ -171,7 +171,8 @@ final class BasicLinkerBackend(config: LinkerBackendImpl.Config) extends LinkerB
       override protected def genModuleDeclarations(moduleID: ModuleID): Option[ByteBuffer] = {
         // Only public modules carry top-level exports worth describing.
         modulesByID.get(moduleID).filter(_.public).map { module =>
-          val content = TypeScriptDeclarations.genModule(module)
+          val moduleKind = config.commonConfig.coreSpec.moduleKind
+          val content = TypeScriptDeclarations.genModule(module, moduleKind)
           ByteBuffer.wrap(content.getBytes(StandardCharsets.UTF_8))
         }
       }
